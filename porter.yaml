@@ -24,6 +24,12 @@ install:
       flags:
         c: '"az login --service-principal --username {{ bundle.credentials.SP_APP_ID}} --password {{ bundle.credentials.SP_CLIENT_SECRET}} --tenant {{ bundle.credentials.TENANT_ID}} >> /dev/null"'
   - exec:
+      command: bash
+      description: "Setting the subscription..."
+      flags:
+        c: '"az account set --subscription {{bundle.credentials.SUBSCRIPTION_ID}}"'
+
+  - exec:
       command: "bash"
       description: "Creating the resource groups...."
       flags:
@@ -82,6 +88,52 @@ install:
       outputs:
         - name: DRONESCHEDULER_ID_PRINCIPAL_ID
           regex: '(.*)\s'
+  - exec:
+      command: bash
+      description: "WORKFLOW_ID_NAME"
+      flags:
+        c: '"az group deployment show -g {{bundle.parameters.RESOURCE_GROUP}} -n {{bundle.outputs.IDENTITIES_DEPLOYMENT_NAME}} --query properties.outputs.workflowIdName.value -o tsv"'
+      outputs:
+        - name: WORKFLOW_ID_NAME
+          regex: '(.*)\s'
+  - exec:
+      command: bash
+      description: "WORKFLOW_ID_PRINCIPAL_ID"
+      flags:
+        c: '"az identity show -g {{bundle.parameters.RESOURCE_GROUP}} -n {{bundle.outputs.WORKFLOW_ID_NAME}} --query principalId -o tsv"'
+      outputs:
+        - name: WORKFLOW_ID_PRINCIPAL_ID
+          regex: '(.*)\s'
+  - exec:
+      command: bash
+      description: "GATEWAY_CONTROLLER_ID_NAME"
+      flags:
+        c: '"az group deployment show -g {{bundle.parameters.RESOURCE_GROUP}} -n {{bundle.outputs.IDENTITIES_DEPLOYMENT_NAME}} --query properties.outputs.appGatewayControllerIdName.value -o tsv"'
+      outputs:
+        - name: GATEWAY_CONTROLLER_ID_NAME
+          regex: '(.*)\s'
+  - exec:
+      command: bash
+      description: "GATEWAY_CONTROLLER_ID_PRINCIPAL_ID"
+      flags:
+        c: '"az identity show -g {{bundle.parameters.RESOURCE_GROUP}} -n {{bundle.outputs.GATEWAY_CONTROLLER_ID_NAME}} --query principalId -o tsv"'
+      outputs:
+        - name: GATEWAY_CONTROLLER_ID_PRINCIPAL_ID
+          regex: '(.*)\s'
+  - exec:
+      command: bash
+      description: "RESOURCE_GROUP_ACR"
+      flags:
+        c: '"az group deployment show -g {{bundle.parameters.RESOURCE_GROUP}} -n {{bundle.outputs.IDENTITIES_DEPLOYMENT_NAME}} --query properties.outputs.acrResourceGroupName.value -o tsv"'
+      outputs:
+        - name: RESOURCE_GROUP_ACR
+          regex: '(.*)\s'
+  - exec:
+      command: bash
+      description: "testing it out"
+      flags:
+        c: '"az ad sp show --id {{bundle.outputs.DELIVERY_ID_PRINCIPAL_ID}}"'
+# the previous blows up.
 upgrade:
   - exec:
       description: "World 2.0"
@@ -119,7 +171,22 @@ outputs:
     description: "The resource id for the dronescheduler service."
   - name: DRONESCHEDULER_ID_PRINCIPAL_ID
     type: string
-    description: "The identity principal id for the dronescheduler service."
+    description: "The identity principal id for the dronescheduler service." 
+  - name: WORKFLOW_ID_NAME
+    type: string
+    description: "The resource id for the workflow service."
+  - name: WORKFLOW_ID_PRINCIPAL_ID
+    type: string
+    description: "The indentity principal for the workflow service."
+  - name: GATEWAY_CONTROLLER_ID_NAME
+    type: string
+    description: "The resource ID for the gateway controller."
+  - name: GATEWAY_CONTROLLER_ID_PRINCIPAL_ID
+    type: string
+    description: "The identity principal for the gateway controller."
+  - name: RESOURCE_GROUP_ACR
+    type: string
+    description: "The resource group name for the ACR instance."
 
 parameters:
   - name: LOCATION
