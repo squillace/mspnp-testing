@@ -1,0 +1,279 @@
+# This is the configuration for Porter
+# You must define steps for each action, but the rest is optional
+# See https://porter.sh/author-bundles for documentation on how to configure your bundle
+# Uncomment out the sections below to take full advantage of what Porter can do!
+
+name: mspnp-test
+version: 0.1.0
+description: "A bundle to deliver the basic infrastructure portion of the Microsoft Patterns & Practices Microservices Reference Implementation located at https://github.com/mspnp/microservices-reference-implementation . Full documentation for this implementation can be read at https://docs.microsoft.com/azure/architecture/microservices/. "
+
+invocationImage: squillace/mspnp-test-install:v0.1.0
+tag: squillace/mspnp-test:v0.1.0
+
+# Uncomment the line below to use a template Dockerfile for your invocation image
+dockerfile: Dockerfile.tmpl
+
+mixins:
+  - exec
+  - az
+  - kubernetes
+
+
+install:
+  - exec: 
+      description: "Logging in to Azure..."
+      command: "bash"
+      flags:
+        c: '"az login --service-principal --username {{ bundle.credentials.SP_APP_ID}} --password {{ bundle.credentials.SP_CLIENT_SECRET}} --tenant {{ bundle.credentials.TENANT_ID}} >> /dev/null"'
+  - exec:
+      command: "bash"
+      description: "Creating the resource groups...."
+      flags:
+        c: '"az group create -n {{bundle.parameters.RESOURCE_GROUP}} -l {{bundle.parameters.LOCATION}}"'
+  - exec: 
+      description: "Azure group deployment"
+      command: "az"
+      arguments: 
+        - "deployment"
+        - "create" 
+        - "--name"
+        - "azuredeploy-prereqs-dev"
+        - "--location"
+        - '{{bundle.parameters.LOCATION}}'
+        - "--template-file"
+        - "./azuredeploy-prereqs.json"
+        - "--parameters"
+        - 'resourceGroupName={{bundle.parameters.RESOURCE_GROUP}}'
+        - 'resourceGroupLocation={{bundle.parameters.LOCATION}}'
+        - "--query"
+        - "properties.outputs.identitiesDeploymentName.value"
+        - "-o" 
+        - "tsv"
+      outputs:
+        - name: IDENTITIES_DEPLOYMENT_NAME
+          regex: "(.*)"
+  - exec:
+      command: bash
+      description: "DELIVERY_ID_NAME"
+      flags:
+        c: '"az group deployment show -g: {{bundle.parameters.RESOURCE_GROUP}} -n {{bundle.outputs.IDENTITIES_DEPLOYMENT_NAME}}--query: properties.outputs.deliveryIdName.value -o: tsv"'
+      outputs:
+        - name: DELIVERY_ID_NAME
+          regex: "(.*)"
+  - exec:
+      command: bash
+      description: "DELIVERY_ID_PRINCIPAL_ID"
+      flags:
+        c: az identity show -g {{bundle.parameters.RESOURCE_GROUP}} -n {{bundle.outputs.DELIVERY_ID_NAME}} --query principalId -o tsv -fred
+      outputs:
+        - name: DELIVERY_ID_PRINCIPAL_ID
+          regex: "(.*)"
+  - exec:
+      command: bash
+      description: "DRONESCHEDULER_ID_NAME"
+      flags:
+        c: az group deployment show -g {{bundle.parameters.RESOURCE_GROUP}} -n {{bundle.outputs.IDENTITIES_DEPLOYMENT_NAME}} --query properties.outputs.droneSchedulerIdName.value -o tsv
+      outputs:
+        - name: DRONESCHEDULER_ID_NAME
+          regex: "(.*)"
+  - exec:
+      command: bash
+      description: "DRONESCHEDULER_ID_PRINCIPAL_ID"
+      flags:
+        c: az identity show -g {{bundle.parameters.RESOURCE_GROUP}} -n {{bundle.outputs.DRONESCHEDULER_ID_NAME}} --query principalId -o tsv
+      outputs:
+        - name: DRONESCHEDULER_ID_PRINCIPAL_ID
+          regex: "(.*)"
+  - exec:
+      command: bash
+      description: "WORKFLOW_ID_NAME"
+      flags:
+        c: az group deployment show -g {{bundle.parameters.RESOURCE_GROUP}} -n {{bundle.outputs.IDENTITIES_DEPLOYMENT_NAME}} --query properties.outputs.workflowIdName.value -o tsv
+      outputs:
+        - name: WORKFLOW_ID_NAME
+          regex: "(.*)"
+  - exec:
+      command: bash
+      description: "WORKFLOW_ID_PRINCIPAL_ID"
+      flags:
+        c: az identity show -g {{bundle.parameters.RESOURCE_GROUP}} -n {{bundle.outputs.WORKFLOW_ID_NAME}} --query principalId -o tsv
+      outputs:
+        - name: WORKFLOW_ID_PRINCIPAL_ID
+          regex: "(.*)"
+  - exec:
+      command: bash
+      description: "GATEWAY_CONTROLLER_ID_NAME"
+      flags:
+        c: az group deployment show -g {{bundle.parameters.RESOURCE_GROUP}} -n {{bundle.outputs.IDENTITIES_DEPLOYMENT_NAME}} --query properties.outputs.appGatewayControllerIdName.value -o tsv
+      outputs:
+        - name: GATEWAY_CONTROLLER_ID_NAME
+          regex: "(.*)"
+  - exec:
+      command: bash
+      description: "GATEWAY_CONTROLLER_ID_PRINCIPAL_ID"
+      flags:
+        c: az identity show -g {{bundle.parameters.RESOURCE_GROUP}} -n {{bundle.outputs.GATEWAY_CONTROLLER_ID_NAME}} --query principalId -o tsv
+      outputs:
+        - name: GATEWAY_CONTROLLER_ID_PRINCIPAL_ID
+          regex: "(.*)"
+  - exec:
+      command: bash
+      description: "RESOURCE_GROUP_ACR"
+      flags:
+        c: az group deployment show -g {{bundle.parameters.RESOURCE_GROUP}} -n {{bundle.outputs.IDENTITIES_DEPLOYMENT_NAME}} --query properties.outputs.acrResourceGroupName.value -o tsv
+      outputs:
+        - name: RESOURCE_GROUP_ACR
+          regex: "(.*)"
+  - exec:
+      command: bash
+      description: "testing it out"
+      flags:
+        c: az ad sp show --id {{bundle.outputs.DELIVERY_ID_PRINCIPAL_ID}}
+          
+  - exec:
+      command: bash
+      description: "Collecting and creating prerequisite values..."
+      arguments:
+        - env #collectingPrerequisiteValues.sh
+
+
+upgrade:
+  - exec:
+      description: "World 2.0"
+      command: bash
+      flags:
+        c: echo World 2.0
+
+uninstall:
+  - exec: 
+      description: "Logging in to Azure..."
+      command: "bash"
+      flags:
+        c: az login --service-principal --username "{{ bundle.credentials.SP_APP_ID}}" --password "{{ bundle.credentials.SP_CLIENT_SECRET}}" --tenant "{{ bundle.credentials.TENANT_ID}}" >> /dev/null
+  - exec:
+      command: bash
+      description: "Collecting and creating prerequisite values..."
+      arguments:
+        - collectingPrerequisiteValues.sh
+  - exec:
+      command: az
+      description: "Deleting DELIVERY_ID_PRINCIPAL_ID service prinicipal...."
+      arguments:
+        - ad 
+        - sp 
+        - delete 
+        - "--id ${DELIVERY_ID_PRINCIPAL_ID} &> /dev/null"
+  - exec:
+      command: az
+      description: "Deleting DRONESCHEDULER_ID_PRINCIPAL_ID service prinicipal...."
+      arguments:
+        - ad 
+        - sp 
+        - delete 
+        - "--id ${DRONESCHEDULER_ID_PRINCIPAL_ID} &> /dev/null"
+  - exec:
+      command: az
+      description: "Deleting WORKFLOW_ID_PRINCIPAL_ID service prinicipal...."
+      arguments:
+        - ad 
+        - sp 
+        - delete 
+        - "--id ${WORKFLOW_ID_PRINCIPAL_ID} &> /dev/null"
+  - exec:
+      command: az
+      description: "Deleting WORKFLOW_ID_PRINCIPAL_ID service prinicipal...."
+      arguments:
+        - ad 
+        - sp 
+        - delete 
+        - "--id ${WORKFLOW_ID_PRINCIPAL_ID} &> /dev/null"
+
+  - exec: 
+      description: "Azure group deployment deletion"
+      command: "az"
+      arguments:
+        - "group" 
+        - "deployment"
+        - "delete" 
+        - "--name"
+        - "azuredeploy-prereqs-dev-identities"
+        - "--resource-group"
+        - "{{bundle.parameters.RESOURCE_GROUP}}"
+  - exec: 
+      description: "Azure group deployment deletion"
+      command: "az"
+      arguments:
+        - "group" 
+        - "deployment"
+        - "delete" 
+        - "--name"
+        - "azuredeploy-prereqs-dev-identities"
+        - "--resource-group"
+        - "{{bundle.parameters.RESOURCE_GROUP}}"
+
+
+  - exec:
+      command: "bash"
+      description: "Deleting containing resource groups...."
+      flags:
+        c: az group list --query "[?contains(name,'mspnp')].name" -o tsv | xargs -I {} az group delete -n {} --no-wait --yes
+
+
+
+
+# See https://porter.sh/author-bundles/#dependencies
+#dependencies:
+#  mysql:
+#    tag: getporter/mysql:v0.1.1
+#    parameters:
+#      database-name: wordpress
+
+# See https://porter.sh/wiring/#credentials
+
+parameters:
+  - name: LOCATION
+    type: string
+    description: "The region into which it will be deployed."
+    default: westus2
+  - name: RESOURCE_GROUP
+    type: string
+    description: "The resource group that will control the resources."
+    default: mspnp-ref-impl
+#  - name: AZURE_DEPLOYMENT_NAME
+#    type: string
+#    description: "The name of the deployment."
+#    default: 
+#    applyTo:
+#      - uninstall
+    
+
+
+
+credentials:
+#  - name: kubeconfig
+#    path: /root/.kube/config
+  - name: SSH_PUBLIC_KEY_FILE
+    type: file
+    path: /root/.ssh/id_rsa.pub
+  - name: SUBSCRIPTION_ID
+    env: SUBSCRIPTION_ID
+    description: "The Azure subscription in which to create the shadow resources for the deployment."
+  - name: SUBSCRIPTION_NAME
+    description: "The name of the Azure subscription."
+    env: SUBSCRIPTION_NAME
+  - name: SP_APP_ID
+    description: "The client id for the service principal used to automate the bundle's actions."
+    env: SP_APP_ID
+  - name: TENANT_ID
+    description: "The tenant identity in which the service principal resides."
+    env: TENANT_ID
+  - name: SP_CLIENT_SECRET
+    description: "The service principal password that is used to log into Azure inside the bundle."
+    env: SP_CLIENT_SECRET
+  - name: SP_OBJECT_ID
+    description: "The service principal object id used in subsequent calls."
+    env: SP_OBJECT_ID
+
+
+
+
